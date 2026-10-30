@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>白黒つけない会議 - デジタルレバー</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      touch-action: none;
+      user-select: none;
+      margin: 0;
+      overflow: hidden;
+    }
+  </style>
+</head>
+<body class="bg-gradient-to-r from-[#3EB0D6] to-[#8C19FF]">
+
+  <div class="min-h-screen w-full flex flex-col items-center justify-center relative">
+    <div class="absolute inset-0 bg-black/40 pointer-events-none"></div>
+
+    <div id="percentageText" class="absolute top-16 text-white text-8xl font-black tabular-nums tracking-tight z-10">
+      50%
+    </div>
+
+    <div class="relative w-full max-w-[900px] h-[600px] flex justify-center items-end z-10">
+      <div id="pivot" class="absolute bottom-0 left-1/2 w-[1px] h-[1px] pointer-events-none"></div>
+
+      <div
+        id="lever"
+        class="absolute z-10 cursor-grab active:cursor-grabbing touch-none origin-bottom"
+        style="width: 200px; height: 500px; bottom: 0px; left: 50%; margin-left: -100px; transform: rotate(0deg); transition: transform 0.1s ease-out;"
+      >
+        <div class="absolute -inset-10 z-0 pointer-events-auto"></div>
+        <svg viewBox="0 0 200 500" class="w-full h-full pointer-events-none overflow-visible relative z-10">
+          <defs>
+            <mask id="hole-mask">
+              <rect width="200" height="500" fill="white" />
+              <circle cx="100" cy="80" r="30" fill="black" />
+            </mask>
+          </defs>
+          <g mask="url(#hole-mask)">
+            <rect x="75" y="100" width="50" height="400" fill="#3EB0D6" />
+            <circle cx="100" cy="80" r="70" fill="#3EB0D6" />
+          </g>
+        </svg>
+      </div>
+
+      <div class="absolute bottom-0 left-1/2 -translate-x-1/2 w-[480px] h-[240px] pointer-events-none z-20 translate-y-8">
+        <svg viewBox="0 0 600 300" class="w-full h-full overflow-visible">
+          <path d="M 0 2000 L 0 300 A 300 300 0 0 1 600 300 L 600 2000 Z" fill="#000000" />
+          <path d="M 80 2000 L 80 300 A 220 220 0 0 1 520 300 L 520 2000 Z" fill="#3EB0D6" />
+          <path d="M 210 2000 L 210 300 A 90 90 0 0 1 390 300 L 390 2000 Z" fill="#8C19FF" />
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
+    import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyBBFsRcr76d8-FLDVKUOi4F87_3hhrEgcQ",
+      authDomain: "shirokuro-lever-sync.firebaseapp.com",
+      databaseURL: "https://shirokuro-lever-sync-default-rtdb.firebaseio.com",
+      projectId: "shirokuro-lever-sync",
+      storageBucket: "shirokuro-lever-sync.firebasestorage.app",
+      messagingSenderId: "1022954131194",
+      appId: "1:1022954131194:web:7b1a6430d5bf4eb693c343"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const leverRef = ref(db, 'lever/rotation');
+
+    const lever = document.getElementById('lever');
+    const pivot = document.getElementById('pivot');
+    const percentageText = document.getElementById('percentageText');
+
+    let isDragging = false;
+    let currentRotation = 0;
+
+    const updateUI = (rotation) => {
+      lever.style.transform = `rotate(${rotation}deg)`;
+      const rawPercentage = ((rotation + 90) / 180) * 100;
+      const percentage = Math.round(rawPercentage / 5) * 5;
+      percentageText.innerText = `${percentage}%`;
+    };
+
+    onValue(leverRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data !== null) {
+        currentRotation = data;
+        if (!isDragging) {
+          updateUI(currentRotation);
+        }
+      }
+    });
+
+    const calculateAndSync = (clientX, clientY) => {
+      const rect = pivot.getBoundingClientRect();
+      const pivotX = rect.left + rect.width / 2;
+      const pivotY = rect.top + rect.height / 2;
+      
+      const dx = clientX - pivotX;
+      const dy = clientY - pivotY;
+
+      let angleDeg = Math.atan2(dy, dx) * (180 / Math.PI);
+
+      if (dy > 0) {
+        angleDeg = dx > 0 ? 0 : -180;
+      } else {
+        angleDeg = Math.max(-180, Math.min(0, angleDeg));
+      }
+
+      currentRotation = angleDeg + 90;
+      
+      updateUI(currentRotation);
+      set(leverRef, currentRotation);
+    };
+
+    lever.addEventListener('pointerdown', (e) => {
+      isDragging = true;
+      lever.setPointerCapture(e.pointerId);
+      lever.style.transition = 'none';
+      calculateAndSync(e.clientX, e.clientY);
+    });
+
+    lever.addEventListener('pointermove', (e) => {
+      if (!isDragging) return;
+      calculateAndSync(e.clientX, e.clientY);
+    });
+
+    const handlePointerUp = (e) => {
+      if (!isDragging) return;
+      isDragging = false;
+      lever.releasePointerCapture(e.pointerId);
+      lever.style.transition = 'transform 0.1s ease-out';
+    };
+
+    lever.addEventListener('pointerup', handlePointerUp);
+    lever.addEventListener('pointercancel', handlePointerUp);
+  </script>
+</body>
+</html>
