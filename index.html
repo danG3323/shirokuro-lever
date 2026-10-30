@@ -6,60 +6,40 @@
   <title>白黒つけない会議 - デジタルレバー</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    body {
-      touch-action: none;
-      user-select: none;
-      margin: 0;
-      overflow: hidden;
+    /* タッチデバイスでの意図しないスクロールを防ぐ（レバー部分のみ適用） */
+    body { margin: 0; }
+    .touch-none { touch-action: none; }
+    /* フェードインアニメーション */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
     }
+    .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
   </style>
 </head>
-<body class="bg-gradient-to-r from-[#3EB0D6] to-[#8C19FF]">
+<body class="bg-gradient-to-r from-[#3EB0D6] to-[#8C19FF] bg-fixed min-h-screen text-white font-sans overflow-x-hidden">
 
-  <div class="min-h-screen w-full flex flex-col items-center justify-center relative">
-    <div class="absolute inset-0 bg-black/40 pointer-events-none"></div>
+  <!-- 背景を少し暗くするための固定半透明オーバーレイ -->
+  <div class="fixed inset-0 bg-black/40 pointer-events-none -z-10"></div>
 
-    <div id="percentageText" class="absolute top-16 text-white text-8xl font-black tabular-nums tracking-tight z-10">
-      50%
-    </div>
-
-    <div class="relative w-full max-w-[900px] h-[600px] flex justify-center items-end z-10">
-      <div id="pivot" class="absolute bottom-0 left-1/2 w-[1px] h-[1px] pointer-events-none"></div>
-
-      <div
-        id="lever"
-        class="absolute z-10 cursor-grab active:cursor-grabbing touch-none origin-bottom"
-        style="width: 200px; height: 500px; bottom: 0px; left: 50%; margin-left: -100px; transform: rotate(0deg); transition: transform 0.1s ease-out;"
-      >
-        <div class="absolute -inset-10 z-0 pointer-events-auto"></div>
-        <svg viewBox="0 0 200 500" class="w-full h-full pointer-events-none overflow-visible relative z-10">
-          <defs>
-            <mask id="hole-mask">
-              <rect width="200" height="500" fill="white" />
-              <circle cx="100" cy="80" r="30" fill="black" />
-            </mask>
-          </defs>
-          <g mask="url(#hole-mask)">
-            <rect x="75" y="100" width="50" height="400" fill="#3EB0D6" />
-            <circle cx="100" cy="80" r="70" fill="#3EB0D6" />
-          </g>
-        </svg>
-      </div>
-
-      <div class="absolute bottom-0 left-1/2 -translate-x-1/2 w-[480px] h-[240px] pointer-events-none z-20 translate-y-8">
-        <svg viewBox="0 0 600 300" class="w-full h-full overflow-visible">
-          <path d="M 0 2000 L 0 300 A 300 300 0 0 1 600 300 L 600 2000 Z" fill="#000000" />
-          <path d="M 80 2000 L 80 300 A 220 220 0 0 1 520 300 L 520 2000 Z" fill="#3EB0D6" />
-          <path d="M 210 2000 L 210 300 A 90 90 0 0 1 390 300 L 390 2000 Z" fill="#8C19FF" />
-        </svg>
-      </div>
-    </div>
+  <!-- 複数のレバーを並べるコンテナ -->
+  <div id="levers-container" class="flex flex-wrap justify-center items-end gap-x-12 gap-y-24 pt-24 pb-48 px-8 w-full min-h-screen">
+    <!-- レバーはJavaScriptで動的に生成されます -->
   </div>
+
+  <!-- レバー追加ボタン -->
+  <button id="addLeverBtn" class="fixed bottom-8 right-8 bg-white text-[#8C19FF] font-bold text-lg py-4 px-8 rounded-full shadow-2xl hover:scale-105 active:scale-95 transition-transform z-50 flex items-center gap-2">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+    </svg>
+    レバーを追加
+  </button>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
-    import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js";
+    import { getDatabase, ref, set, push, onValue, remove } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js";
 
+    // Firebase設定（変更なし）
     const firebaseConfig = {
       apiKey: "AIzaSyBBFsRcr76d8-FLDVKUOi4F87_3hhrEgcQ",
       authDomain: "shirokuro-lever-sync.firebaseapp.com",
@@ -72,75 +52,194 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
-    const leverRef = ref(db, 'lever/rotation');
+    const leversRef = ref(db, 'levers');
 
-    const lever = document.getElementById('lever');
-    const pivot = document.getElementById('pivot');
-    const percentageText = document.getElementById('percentageText');
+    const container = document.getElementById('levers-container');
+    const addLeverBtn = document.getElementById('addLeverBtn');
 
-    let isDragging = false;
-    let currentRotation = 0;
+    // 画面上のレバー要素を管理
+    const localLevers = {};
+    let draggingId = null; // 現在ドラッグ中のレバーID
 
-    const updateUI = (rotation) => {
-      lever.style.transform = `rotate(${rotation}deg)`;
+    // --- レバーを1つ画面に作成する関数 ---
+    function createLeverDOM(id, data) {
+      const wrapper = document.createElement('div');
+      wrapper.className = "relative flex flex-col items-center shrink-0 w-[300px] animate-fade-in";
+      wrapper.id = `lever-wrapper-${id}`;
+      
+      wrapper.innerHTML = `
+        <!-- 削除ボタン（右上） -->
+        <button class="delete-btn absolute -top-16 -right-4 text-white/50 hover:text-white bg-black/20 hover:bg-black/40 rounded-full p-2 transition">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+
+        <!-- パーセンテージ ＆ リセットボタン -->
+        <div class="flex flex-col items-center z-10 mb-8">
+          <div class="percentage-text text-white text-6xl font-black tabular-nums tracking-tight">50%</div>
+          <button class="reset-btn mt-3 bg-white/20 hover:bg-white/40 active:scale-95 text-white text-sm py-1.5 px-5 rounded-full backdrop-blur-sm transition-all shadow-lg font-bold">50%に戻す</button>
+        </div>
+
+        <!-- レバーと土台（複数並べやすいように縮小サイズ） -->
+        <div class="relative w-[240px] h-[240px] flex justify-center items-end mt-4">
+          <div class="pivot absolute bottom-0 left-1/2 w-[1px] h-[1px] pointer-events-none"></div>
+          
+          <div class="lever-handle absolute z-10 cursor-grab active:cursor-grabbing touch-none origin-bottom transition-transform duration-100 ease-out" 
+               style="width: 100px; height: 250px; bottom: 0; left: 50%; margin-left: -50px;">
+            <div class="absolute -inset-10 z-0 pointer-events-auto"></div>
+            <svg viewBox="0 0 200 500" class="w-full h-full pointer-events-none overflow-visible relative z-10">
+              <defs>
+                <mask id="hole-mask-${id}">
+                  <rect width="200" height="500" fill="white" />
+                  <circle cx="100" cy="80" r="30" fill="black" />
+                </mask>
+              </defs>
+              <g mask="url(#hole-mask-${id})">
+                <rect x="75" y="100" width="50" height="400" fill="#3EB0D6" />
+                <circle cx="100" cy="80" r="70" fill="#3EB0D6" />
+              </g>
+            </svg>
+          </div>
+
+          <div class="absolute bottom-0 left-1/2 -translate-x-1/2 w-[240px] h-[120px] pointer-events-none z-20 translate-y-4">
+            <svg viewBox="0 0 600 2000" class="w-full h-full overflow-visible">
+              <path d="M 0 2000 L 0 300 A 300 300 0 0 1 600 300 L 600 2000 Z" fill="#000000" />
+              <path d="M 80 2000 L 80 300 A 220 220 0 0 1 520 300 L 520 2000 Z" fill="#3EB0D6" />
+              <path d="M 210 2000 L 210 300 A 90 90 0 0 1 390 300 L 390 2000 Z" fill="#8C19FF" />
+            </svg>
+          </div>
+        </div>
+
+        <!-- 名前入力フィールド -->
+        <input type="text" class="name-input mt-12 bg-transparent text-white text-center text-3xl font-bold border-b-2 border-white/30 focus:border-white focus:bg-white/10 outline-none w-full transition py-2 rounded-t-sm" 
+               value="${data.name || ''}" placeholder="名前を入力">
+      `;
+
+      container.appendChild(wrapper);
+      localLevers[id] = { element: wrapper };
+
+      // --- イベント設定 ---
+      const leverHandle = wrapper.querySelector('.lever-handle');
+      const pivot = wrapper.querySelector('.pivot');
+      const nameInput = wrapper.querySelector('.name-input');
+      const resetBtn = wrapper.querySelector('.reset-btn');
+      const deleteBtn = wrapper.querySelector('.delete-btn');
+      let isDragging = false;
+
+      // 50%リセット
+      resetBtn.addEventListener('click', () => {
+        set(ref(db, `levers/${id}/rotation`), 0);
+      });
+
+      // 削除
+      deleteBtn.addEventListener('click', () => {
+        if(confirm("このレバーを削除しますか？")) {
+          remove(ref(db, `levers/${id}`));
+        }
+      });
+
+      // 名前の同期（入力完了時に送信）
+      nameInput.addEventListener('change', (e) => {
+        set(ref(db, `levers/${id}/name`), e.target.value);
+      });
+
+      const updateAngle = (clientX, clientY) => {
+        const rect = pivot.getBoundingClientRect();
+        const pivotX = rect.left + rect.width / 2;
+        const pivotY = rect.top + rect.height / 2;
+        const dx = clientX - pivotX;
+        const dy = clientY - pivotY;
+
+        let angleDeg = Math.atan2(dy, dx) * (180 / Math.PI);
+        if (dy > 0) {
+          angleDeg = dx > 0 ? 0 : -180;
+        } else {
+          angleDeg = Math.max(-180, Math.min(0, angleDeg));
+        }
+
+        const rotation = angleDeg + 90;
+        applyTransform(id, rotation); 
+        set(ref(db, `levers/${id}/rotation`), rotation); 
+      };
+
+      leverHandle.addEventListener('pointerdown', (e) => {
+        isDragging = true;
+        draggingId = id;
+        leverHandle.setPointerCapture(e.pointerId);
+        leverHandle.style.transition = 'none';
+        updateAngle(e.clientX, e.clientY);
+      });
+
+      leverHandle.addEventListener('pointermove', (e) => {
+        if (!isDragging) return;
+        updateAngle(e.clientX, e.clientY);
+      });
+
+      const handlePointerUp = (e) => {
+        if (!isDragging) return;
+        isDragging = false;
+        draggingId = null;
+        leverHandle.releasePointerCapture(e.pointerId);
+        leverHandle.style.transition = 'transform 0.1s ease-out';
+      };
+
+      leverHandle.addEventListener('pointerup', handlePointerUp);
+      leverHandle.addEventListener('pointercancel', handlePointerUp);
+
+      applyTransform(id, data.rotation || 0);
+    }
+
+    // --- 見た目更新 ---
+    function applyTransform(id, rotation) {
+      if (!localLevers[id]) return;
+      const { element } = localLevers[id];
+      const leverHandle = element.querySelector('.lever-handle');
+      const text = element.querySelector('.percentage-text');
+      
+      leverHandle.style.transform = `rotate(${rotation}deg)`;
       const rawPercentage = ((rotation + 90) / 180) * 100;
       const percentage = Math.round(rawPercentage / 5) * 5;
-      percentageText.innerText = `${percentage}%`;
-    };
+      text.innerText = `${percentage}%`;
+    }
 
-    onValue(leverRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data !== null) {
-        currentRotation = data;
-        if (!isDragging) {
-          updateUI(currentRotation);
+    // --- レバー追加ボタン ---
+    addLeverBtn.addEventListener('click', () => {
+      push(leversRef, { rotation: 0, name: "新しいレバー" });
+    });
+
+    // --- Firebase監視 ---
+    let isFirstLoad = true;
+    onValue(leversRef, (snapshot) => {
+      const data = snapshot.val() || {};
+
+      if (isFirstLoad && Object.keys(data).length === 0) {
+        push(leversRef, { rotation: 0, name: "名前" });
+        isFirstLoad = false;
+        return;
+      }
+      isFirstLoad = false;
+      
+      Object.keys(data).forEach(id => {
+        if (!localLevers[id]) {
+          createLeverDOM(id, data[id]);
+        } else {
+          if (draggingId !== id) applyTransform(id, data[id].rotation || 0);
+          
+          const nameInput = localLevers[id].element.querySelector('.name-input');
+          if (document.activeElement !== nameInput && data[id].name !== undefined) {
+            nameInput.value = data[id].name;
+          }
         }
-      }
-    });
-
-    const calculateAndSync = (clientX, clientY) => {
-      const rect = pivot.getBoundingClientRect();
-      const pivotX = rect.left + rect.width / 2;
-      const pivotY = rect.top + rect.height / 2;
+      });
       
-      const dx = clientX - pivotX;
-      const dy = clientY - pivotY;
-
-      let angleDeg = Math.atan2(dy, dx) * (180 / Math.PI);
-
-      if (dy > 0) {
-        angleDeg = dx > 0 ? 0 : -180;
-      } else {
-        angleDeg = Math.max(-180, Math.min(0, angleDeg));
-      }
-
-      currentRotation = angleDeg + 90;
-      
-      updateUI(currentRotation);
-      set(leverRef, currentRotation);
-    };
-
-    lever.addEventListener('pointerdown', (e) => {
-      isDragging = true;
-      lever.setPointerCapture(e.pointerId);
-      lever.style.transition = 'none';
-      calculateAndSync(e.clientX, e.clientY);
+      Object.keys(localLevers).forEach(id => {
+        if (!data[id]) {
+          localLevers[id].element.remove();
+          delete localLevers[id];
+        }
+      });
     });
-
-    lever.addEventListener('pointermove', (e) => {
-      if (!isDragging) return;
-      calculateAndSync(e.clientX, e.clientY);
-    });
-
-    const handlePointerUp = (e) => {
-      if (!isDragging) return;
-      isDragging = false;
-      lever.releasePointerCapture(e.pointerId);
-      lever.style.transition = 'transform 0.1s ease-out';
-    };
-
-    lever.addEventListener('pointerup', handlePointerUp);
-    lever.addEventListener('pointercancel', handlePointerUp);
   </script>
 </body>
 </html>
