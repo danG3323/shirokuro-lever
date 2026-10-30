@@ -22,8 +22,8 @@
   <!-- 背景を少し暗くするための固定半透明オーバーレイ -->
   <div class="fixed inset-0 bg-black/40 pointer-events-none -z-10"></div>
 
-  <!-- 複数のレバーを並べるコンテナ -->
-  <div id="levers-container" class="flex flex-wrap justify-center items-end gap-x-16 gap-y-32 pt-24 pb-48 px-8 w-full min-h-screen">
+  <!-- 複数のレバーを並べるコンテナ（gap-x-32 gap-y-40 に広げて干渉を防止） -->
+  <div id="levers-container" class="flex flex-wrap justify-center items-end gap-x-32 gap-y-40 pt-24 pb-48 px-8 w-full min-h-screen">
     <!-- レバーはJavaScriptで動的に生成されます -->
   </div>
 
@@ -104,7 +104,6 @@
 
           <div class="absolute bottom-0 left-1/2 -translate-x-1/2 w-[480px] h-[240px] pointer-events-none z-20 translate-y-8">
             <svg viewBox="0 0 600 300" class="w-full h-full overflow-visible">
-              <!-- 下へ伸びる長さを 2000 から 360 に変更し、いい感じの位置で途切れるようにカット -->
               <path d="M 0 360 L 0 300 A 300 300 0 0 1 600 300 L 600 360 Z" fill="#000000" />
               <path d="M 80 360 L 80 300 A 220 220 0 0 1 520 300 L 520 360 Z" fill="#3EB0D6" />
               <path d="M 210 360 L 210 300 A 90 90 0 0 1 390 300 L 390 360 Z" fill="#8C19FF" />
@@ -112,7 +111,7 @@
           </div>
         </div>
 
-        <!-- 名前入力フィールド（上部のマージンを mt-24 に広げてかぶりを防止） -->
+        <!-- 名前入力フィールド -->
         <input type="text" class="name-input mt-24 bg-transparent text-white text-center text-4xl font-bold border-b-2 border-white/30 focus:border-white focus:bg-white/10 outline-none w-full transition py-2 rounded-t-sm" 
                value="${data.name || ''}" placeholder="名前を入力">
       `;
