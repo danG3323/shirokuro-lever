@@ -23,7 +23,7 @@
   <div class="fixed inset-0 bg-black/40 pointer-events-none -z-10"></div>
 
   <!-- 複数のレバーを並べるコンテナ -->
-  <div id="levers-container" class="flex flex-wrap justify-center items-end gap-x-12 gap-y-24 pt-24 pb-48 px-8 w-full min-h-screen">
+  <div id="levers-container" class="flex flex-wrap justify-center items-end gap-x-16 gap-y-24 pt-24 pb-48 px-8 w-full min-h-screen">
     <!-- レバーはJavaScriptで動的に生成されます -->
   </div>
 
@@ -39,7 +39,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
     import { getDatabase, ref, set, push, onValue, remove } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js";
 
-    // Firebase設定（変更なし）
+    // Firebase設定
     const firebaseConfig = {
       apiKey: "AIzaSyBBFsRcr76d8-FLDVKUOi4F87_3hhrEgcQ",
       authDomain: "shirokuro-lever-sync.firebaseapp.com",
@@ -59,12 +59,13 @@
 
     // 画面上のレバー要素を管理
     const localLevers = {};
-    let draggingId = null; // 現在ドラッグ中のレバーID
+    let draggingId = null; 
 
     // --- レバーを1つ画面に作成する関数 ---
     function createLeverDOM(id, data) {
       const wrapper = document.createElement('div');
-      wrapper.className = "relative flex flex-col items-center shrink-0 w-[300px] animate-fade-in";
+      // ラッパーの幅を元のサイズが収まる500pxに変更
+      wrapper.className = "relative flex flex-col items-center shrink-0 w-[500px] animate-fade-in";
       wrapper.id = `lever-wrapper-${id}`;
       
       wrapper.innerHTML = `
@@ -77,16 +78,16 @@
 
         <!-- パーセンテージ ＆ リセットボタン -->
         <div class="flex flex-col items-center z-10 mb-8">
-          <div class="percentage-text text-white text-6xl font-black tabular-nums tracking-tight">50%</div>
-          <button class="reset-btn mt-3 bg-white/20 hover:bg-white/40 active:scale-95 text-white text-sm py-1.5 px-5 rounded-full backdrop-blur-sm transition-all shadow-lg font-bold">50%に戻す</button>
+          <div class="percentage-text text-white text-7xl font-black tabular-nums tracking-tight">50%</div>
+          <button class="reset-btn mt-4 bg-white/20 hover:bg-white/40 active:scale-95 text-white py-2 px-6 rounded-full backdrop-blur-sm transition-all shadow-lg font-bold">50%に戻す</button>
         </div>
 
-        <!-- レバーと土台（複数並べやすいように縮小サイズ） -->
-        <div class="relative w-[240px] h-[240px] flex justify-center items-end mt-4">
+        <!-- レバーと土台（元のサイズ） -->
+        <div class="relative w-[480px] h-[480px] flex justify-center items-end mt-4">
           <div class="pivot absolute bottom-0 left-1/2 w-[1px] h-[1px] pointer-events-none"></div>
           
           <div class="lever-handle absolute z-10 cursor-grab active:cursor-grabbing touch-none origin-bottom transition-transform duration-100 ease-out" 
-               style="width: 100px; height: 250px; bottom: 0; left: 50%; margin-left: -50px;">
+               style="width: 200px; height: 500px; bottom: 0; left: 50%; margin-left: -100px;">
             <div class="absolute -inset-10 z-0 pointer-events-auto"></div>
             <svg viewBox="0 0 200 500" class="w-full h-full pointer-events-none overflow-visible relative z-10">
               <defs>
@@ -102,7 +103,7 @@
             </svg>
           </div>
 
-          <div class="absolute bottom-0 left-1/2 -translate-x-1/2 w-[240px] h-[120px] pointer-events-none z-20 translate-y-4">
+          <div class="absolute bottom-0 left-1/2 -translate-x-1/2 w-[480px] h-[240px] pointer-events-none z-20 translate-y-8">
             <svg viewBox="0 0 600 2000" class="w-full h-full overflow-visible">
               <path d="M 0 2000 L 0 300 A 300 300 0 0 1 600 300 L 600 2000 Z" fill="#000000" />
               <path d="M 80 2000 L 80 300 A 220 220 0 0 1 520 300 L 520 2000 Z" fill="#3EB0D6" />
@@ -112,14 +113,13 @@
         </div>
 
         <!-- 名前入力フィールド -->
-        <input type="text" class="name-input mt-12 bg-transparent text-white text-center text-3xl font-bold border-b-2 border-white/30 focus:border-white focus:bg-white/10 outline-none w-full transition py-2 rounded-t-sm" 
+        <input type="text" class="name-input mt-16 bg-transparent text-white text-center text-4xl font-bold border-b-2 border-white/30 focus:border-white focus:bg-white/10 outline-none w-full transition py-2 rounded-t-sm" 
                value="${data.name || ''}" placeholder="名前を入力">
       `;
 
       container.appendChild(wrapper);
       localLevers[id] = { element: wrapper };
 
-      // --- イベント設定 ---
       const leverHandle = wrapper.querySelector('.lever-handle');
       const pivot = wrapper.querySelector('.pivot');
       const nameInput = wrapper.querySelector('.name-input');
@@ -127,19 +127,16 @@
       const deleteBtn = wrapper.querySelector('.delete-btn');
       let isDragging = false;
 
-      // 50%リセット
       resetBtn.addEventListener('click', () => {
         set(ref(db, `levers/${id}/rotation`), 0);
       });
 
-      // 削除
       deleteBtn.addEventListener('click', () => {
         if(confirm("このレバーを削除しますか？")) {
           remove(ref(db, `levers/${id}`));
         }
       });
 
-      // 名前の同期（入力完了時に送信）
       nameInput.addEventListener('change', (e) => {
         set(ref(db, `levers/${id}/name`), e.target.value);
       });
@@ -190,7 +187,6 @@
       applyTransform(id, data.rotation || 0);
     }
 
-    // --- 見た目更新 ---
     function applyTransform(id, rotation) {
       if (!localLevers[id]) return;
       const { element } = localLevers[id];
@@ -203,12 +199,10 @@
       text.innerText = `${percentage}%`;
     }
 
-    // --- レバー追加ボタン ---
     addLeverBtn.addEventListener('click', () => {
       push(leversRef, { rotation: 0, name: "新しいレバー" });
     });
 
-    // --- Firebase監視 ---
     let isFirstLoad = true;
     onValue(leversRef, (snapshot) => {
       const data = snapshot.val() || {};
