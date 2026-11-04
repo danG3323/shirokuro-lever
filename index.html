@@ -110,10 +110,6 @@
             </svg>
           </div>
         </div>
-
-        <!-- 名前入力フィールド -->
-        <input type="text" class="name-input mt-24 bg-transparent text-white text-center text-4xl font-bold border-b-2 border-white/30 focus:border-white focus:bg-white/10 outline-none w-full transition py-2 rounded-t-sm" 
-               value="${data.name || ''}" placeholder="名前を入力">
       `;
 
       container.appendChild(wrapper);
@@ -121,7 +117,6 @@
 
       const leverHandle = wrapper.querySelector('.lever-handle');
       const pivot = wrapper.querySelector('.pivot');
-      const nameInput = wrapper.querySelector('.name-input');
       const resetBtn = wrapper.querySelector('.reset-btn');
       const deleteBtn = wrapper.querySelector('.delete-btn');
       let isDragging = false;
@@ -134,10 +129,6 @@
         if(confirm("このレバーを削除しますか？")) {
           remove(ref(db, `levers/${id}`));
         }
-      });
-
-      nameInput.addEventListener('change', (e) => {
-        set(ref(db, `levers/${id}/name`), e.target.value);
       });
 
       const updateAngle = (clientX, clientY) => {
@@ -218,11 +209,6 @@
           createLeverDOM(id, data[id]);
         } else {
           if (draggingId !== id) applyTransform(id, data[id].rotation || 0);
-          
-          const nameInput = localLevers[id].element.querySelector('.name-input');
-          if (document.activeElement !== nameInput && data[id].name !== undefined) {
-            nameInput.value = data[id].name;
-          }
         }
       });
       
