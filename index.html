@@ -6,10 +6,8 @@
   <title>白黒つけない会議 - デジタルレバー</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    /* タッチデバイスでの意図しないスクロールを防ぐ（レバー部分のみ適用） */
     body { margin: 0; }
     .touch-none { touch-action: none; }
-    /* フェードインアニメーション */
     @keyframes fadeIn {
       from { opacity: 0; transform: translateY(20px); }
       to { opacity: 1; transform: translateY(0); }
@@ -19,15 +17,20 @@
 </head>
 <body class="bg-gradient-to-r from-[#3EB0D6] to-[#8C19FF] bg-fixed min-h-screen text-white font-sans overflow-x-hidden">
 
-  <!-- 背景を少し暗くするための固定半透明オーバーレイ -->
+  <!-- 固定半透明オーバーレイ -->
   <div class="fixed inset-0 bg-black/40 pointer-events-none -z-10"></div>
 
-  <!-- 複数のレバーを並べるコンテナ（gap-x-32 gap-y-40 に広げて干渉を防止） -->
-  <div id="levers-container" class="flex flex-wrap justify-center items-end gap-x-32 gap-y-40 pt-24 pb-48 px-8 w-full min-h-screen">
+  <!-- 画面上部：お題入力エリア -->
+  <div class="w-full max-w-5xl mx-auto pt-12 px-8 z-10 relative">
+    <input type="text" id="topicInput" placeholder="お題を入力..." class="w-full bg-black/20 hover:bg-black/30 text-white text-3xl md:text-5xl font-bold text-center py-6 px-8 rounded-3xl placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/50 backdrop-blur-sm transition-all border border-white/10 shadow-xl" />
+  </div>
+
+  <!-- レバーコンテナ（min-h-[80vh]で高さをしっかり確保し、要素の潰れを防止） -->
+  <div id="levers-container" class="flex flex-wrap justify-center items-end gap-x-32 gap-y-40 pt-16 pb-48 px-8 w-full min-h-[80vh]">
     <!-- レバーはJavaScriptで動的に生成されます -->
   </div>
 
-  <!-- レバー追加ボタン -->
+  <!-- 追加ボタン -->
   <button id="addLeverBtn" class="fixed bottom-8 right-8 bg-white text-[#8C19FF] font-bold text-lg py-4 px-8 rounded-full shadow-2xl hover:scale-105 active:scale-95 transition-transform z-50 flex items-center gap-2">
     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
       <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
@@ -39,7 +42,6 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
     import { getDatabase, ref, set, push, onValue, remove } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js";
 
-    // Firebase設定
     const firebaseConfig = {
       apiKey: "AIzaSyBBFsRcr76d8-FLDVKUOi4F87_3hhrEgcQ",
       authDomain: "shirokuro-lever-sync.firebaseapp.com",
@@ -53,35 +55,48 @@
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
     const leversRef = ref(db, 'levers');
+    const topicRef = ref(db, 'topic');
 
     const container = document.getElementById('levers-container');
     const addLeverBtn = document.getElementById('addLeverBtn');
+    const topicInput = document.getElementById('topicInput');
 
-    // 画面上のレバー要素を管理
     const localLevers = {};
     let draggingId = null; 
 
-    // --- レバーを1つ画面に作成する関数 ---
+    const escapeHTML = (str) => {
+      return (str || '').toString().replace(/[&<>'"]/g, tag => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+      }[tag]));
+    };
+
+    topicInput.addEventListener('input', (e) => {
+      set(topicRef, e.target.value);
+    });
+
+    onValue(topicRef, (snapshot) => {
+      if (document.activeElement !== topicInput) {
+        topicInput.value = snapshot.val() || '';
+      }
+    });
+
     function createLeverDOM(id, data) {
       const wrapper = document.createElement('div');
       wrapper.className = "relative flex flex-col items-center shrink-0 w-[500px] animate-fade-in";
       wrapper.id = `lever-wrapper-${id}`;
       
       wrapper.innerHTML = `
-        <!-- 削除ボタン（右上） -->
         <button class="delete-btn absolute -top-16 -right-4 text-white/50 hover:text-white bg-black/20 hover:bg-black/40 rounded-full p-2 transition">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
 
-        <!-- パーセンテージ ＆ リセットボタン -->
         <div class="flex flex-col items-center z-10 mb-8">
           <div class="percentage-text text-white text-7xl font-black tabular-nums tracking-tight">50%</div>
           <button class="reset-btn mt-4 bg-white/20 hover:bg-white/40 active:scale-95 text-white py-2 px-6 rounded-full backdrop-blur-sm transition-all shadow-lg font-bold">50%に戻す</button>
         </div>
 
-        <!-- レバーと土台 -->
         <div class="relative w-[480px] h-[480px] flex justify-center items-end mt-4">
           <div class="pivot absolute bottom-0 left-1/2 w-[1px] h-[1px] pointer-events-none"></div>
           
@@ -110,6 +125,11 @@
             </svg>
           </div>
         </div>
+
+        <!-- 参加者名入力（mt-24で余白を広げ、z-30 relativeで土台の手前に配置） -->
+        <div class="mt-24 w-full flex justify-center z-30 relative">
+          <input type="text" class="name-input w-[320px] bg-black/20 hover:bg-black/30 text-white text-2xl font-bold text-center py-4 px-6 rounded-2xl placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/50 backdrop-blur-sm transition-all border border-white/10 shadow-lg" placeholder="名前を入力" value="${escapeHTML(data.name)}" />
+        </div>
       `;
 
       container.appendChild(wrapper);
@@ -119,7 +139,12 @@
       const pivot = wrapper.querySelector('.pivot');
       const resetBtn = wrapper.querySelector('.reset-btn');
       const deleteBtn = wrapper.querySelector('.delete-btn');
+      const nameInput = wrapper.querySelector('.name-input');
       let isDragging = false;
+
+      nameInput.addEventListener('input', (e) => {
+        set(ref(db, `levers/${id}/name`), e.target.value);
+      });
 
       resetBtn.addEventListener('click', () => {
         set(ref(db, `levers/${id}/rotation`), 0);
@@ -190,7 +215,7 @@
     }
 
     addLeverBtn.addEventListener('click', () => {
-      push(leversRef, { rotation: 0, name: "新しいレバー" });
+      push(leversRef, { rotation: 0, name: "" });
     });
 
     let isFirstLoad = true;
@@ -198,7 +223,7 @@
       const data = snapshot.val() || {};
 
       if (isFirstLoad && Object.keys(data).length === 0) {
-        push(leversRef, { rotation: 0, name: "名前" });
+        push(leversRef, { rotation: 0, name: "" });
         isFirstLoad = false;
         return;
       }
@@ -209,6 +234,11 @@
           createLeverDOM(id, data[id]);
         } else {
           if (draggingId !== id) applyTransform(id, data[id].rotation || 0);
+          
+          const nameInput = localLevers[id].element.querySelector('.name-input');
+          if (document.activeElement !== nameInput && data[id].name !== undefined) {
+            nameInput.value = data[id].name;
+          }
         }
       });
       
