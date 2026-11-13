@@ -17,13 +17,18 @@
     .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
   </style>
 </head>
-<body class="bg-gradient-to-r from-[#3EB0D6] to-[#8C19FF] bg-fixed min-h-screen text-white font-sans overflow-x-hidden">
+<body class="bg-gradient-to-r from-[#3EB0D6] to-[#8C19FF] bg-fixed min-h-screen text-white font-sans overflow-x-hidden flex flex-col">
 
   <!-- 背景を少し暗くするための固定半透明オーバーレイ -->
   <div class="fixed inset-0 bg-black/40 pointer-events-none -z-10"></div>
 
-  <!-- 複数のレバーを並べるコンテナ（gap-x-32 gap-y-40 に広げて干渉を防止） -->
-  <div id="levers-container" class="flex flex-wrap justify-center items-end gap-x-32 gap-y-40 pt-24 pb-48 px-8 w-full min-h-screen">
+  <!-- 画面上部：お題入力エリア -->
+  <div class="w-full max-w-5xl mx-auto pt-12 px-8 z-10 relative shrink-0">
+    <input type="text" id="topicInput" placeholder="お題を入力..." class="w-full bg-black/20 hover:bg-black/30 text-white text-3xl md:text-5xl font-bold text-center py-6 px-8 rounded-3xl placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/50 backdrop-blur-sm transition-all border border-white/10 shadow-xl" />
+  </div>
+
+  <!-- 複数のレバーを並べるコンテナ -->
+  <div id="levers-container" class="flex flex-wrap justify-center items-end gap-x-32 gap-y-32 pt-20 pb-48 px-8 w-full grow">
     <!-- レバーはJavaScriptで動的に生成されます -->
   </div>
 
@@ -53,13 +58,34 @@
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
     const leversRef = ref(db, 'levers');
+    const topicRef = ref(db, 'topic');
 
     const container = document.getElementById('levers-container');
     const addLeverBtn = document.getElementById('addLeverBtn');
+    const topicInput = document.getElementById('topicInput');
 
     // 画面上のレバー要素を管理
     const localLevers = {};
     let draggingId = null; 
+
+    // HTMLエスケープ処理
+    const escapeHTML = (str) => {
+      return (str || '').toString().replace(/[&<>'"]/g, tag => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+      }[tag]));
+    };
+
+    // --- お題の同期処理 ---
+    topicInput.addEventListener('input', (e) => {
+      set(topicRef, e.target.value);
+    });
+
+    onValue(topicRef, (snapshot) => {
+      // 自分が入力中でなければ値を反映
+      if (document.activeElement !== topicInput) {
+        topicInput.value = snapshot.val() || '';
+      }
+    });
 
     // --- レバーを1つ画面に作成する関数 ---
     function createLeverDOM(id, data) {
@@ -110,6 +136,11 @@
             </svg>
           </div>
         </div>
+
+        <!-- 参加者名入力 -->
+        <div class="mt-12 w-full flex justify-center z-10">
+          <input type="text" class="name-input w-[320px] bg-black/20 hover:bg-black/30 text-white text-2xl font-bold text-center py-4 px-6 rounded-2xl placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/50 backdrop-blur-sm transition-all border border-white/10 shadow-lg" placeholder="名前を入力" value="${escapeHTML(data.name)}" />
+        </div>
       `;
 
       container.appendChild(wrapper);
@@ -119,7 +150,13 @@
       const pivot = wrapper.querySelector('.pivot');
       const resetBtn = wrapper.querySelector('.reset-btn');
       const deleteBtn = wrapper.querySelector('.delete-btn');
+      const nameInput = wrapper.querySelector('.name-input');
       let isDragging = false;
+
+      // 名前の同期処理
+      nameInput.addEventListener('input', (e) => {
+        set(ref(db, `levers/${id}/name`), e.target.value);
+      });
 
       resetBtn.addEventListener('click', () => {
         set(ref(db, `levers/${id}/rotation`), 0);
@@ -190,7 +227,7 @@
     }
 
     addLeverBtn.addEventListener('click', () => {
-      push(leversRef, { rotation: 0, name: "新しいレバー" });
+      push(leversRef, { rotation: 0, name: "" });
     });
 
     let isFirstLoad = true;
@@ -198,7 +235,7 @@
       const data = snapshot.val() || {};
 
       if (isFirstLoad && Object.keys(data).length === 0) {
-        push(leversRef, { rotation: 0, name: "名前" });
+        push(leversRef, { rotation: 0, name: "" });
         isFirstLoad = false;
         return;
       }
@@ -208,7 +245,14 @@
         if (!localLevers[id]) {
           createLeverDOM(id, data[id]);
         } else {
+          // レバー角度の同期
           if (draggingId !== id) applyTransform(id, data[id].rotation || 0);
+          
+          // 名前の同期（自分が入力中でなければ反映）
+          const nameInput = localLevers[id].element.querySelector('.name-input');
+          if (document.activeElement !== nameInput && data[id].name !== undefined) {
+            nameInput.value = data[id].name;
+          }
         }
       });
       
